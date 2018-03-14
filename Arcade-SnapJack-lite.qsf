@@ -377,7 +377,6 @@ set_global_assignment -name VHDL_FILE ttl_393.vhd
 set_global_assignment -name VHDL_FILE ttl_175.vhd
 set_global_assignment -name VHDL_FILE dpram.vhd
 set_global_assignment -name VHDL_FILE spram.vhd
-set_global_assignment -name VERILOG_FILE screen_rotate.v
 set_global_assignment -name VHDL_FILE ladybug_rams.vhd
 set_global_assignment -name VHDL_FILE ladybug_video_unit.vhd
 set_global_assignment -name VHDL_FILE ladybug_video_timing.vhd

@@ -89,6 +89,7 @@ localparam CONF_STR = {
 	"A.SNPJCK;;",
 	"-;",
 	"O1,Aspect Ratio,Original,Wide;",
+	"O34,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
 	"-;",
 	"-;",
 	"T6,Reset;",
@@ -98,7 +99,7 @@ localparam CONF_STR = {
 
 ////////////////////   CLOCKS   ///////////////////
 
-wire clk_sys;
+wire clk_sys, clk_40;
 wire pll_locked;
 
 pll pll
@@ -106,6 +107,7 @@ pll pll
 	.refclk(CLK_50M),
 	.rst(0),
 	.outclk_0(clk_sys),
+	.outclk_1(clk_40),
 	.locked(pll_locked)
 );
 
@@ -124,6 +126,8 @@ wire [10:0] ps2_key;
 wire [15:0] joystick_0,joystick_1;
 wire [15:0] joy = joystick_0 | joystick_1;
 
+wire        forced_scandoubler;
+
 hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 (
 	.clk_sys(clk_sys),
@@ -133,6 +137,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 
 	.buttons(buttons),
 	.status(status),
+	.forced_scandoubler(forced_scandoubler),
 
 	.ioctl_download(ioctl_download),
 	.ioctl_wr(ioctl_wr),
@@ -185,19 +190,11 @@ wire m_start1 = btn_one_player  | joy[4];
 wire m_start2 = btn_two_players | joy[5];
 wire m_coin   = m_start1 | m_start2;
 
-wire hblank, vblank;
 wire ce_vid;
 wire hs, vs;
 wire [1:0] r,g,b;
 
-assign VGA_CLK  = clk_sys;
-assign VGA_CE   = ce_vid;
-assign VGA_R    = {4{r}};
-assign VGA_G    = {4{g}};
-assign VGA_B    = {4{b}};
-assign VGA_DE   = ~(hblank | vblank);
-assign VGA_HS   = ~hs;
-assign VGA_VS   = ~vs;
+assign VGA_CLK  = clk_40;
 
 assign HDMI_CLK = VGA_CLK;
 assign HDMI_CE  = VGA_CE;
@@ -208,6 +205,29 @@ assign HDMI_DE  = VGA_DE;
 assign HDMI_HS  = VGA_HS;
 assign HDMI_VS  = VGA_VS;
 assign HDMI_SL  = 0;
+
+wire HSync = ~hs;
+wire VSync = ~vs;
+wire HBlank, VBlank;
+
+wire [1:0] scale = status[4:3];
+
+video_mixer #(.HALF_DEPTH(1)) video_mixer
+(
+	.*,
+	.clk_sys(VGA_CLK),
+	.ce_pix(ce_vid),
+	.ce_pix_out(VGA_CE),
+
+	.scanlines({scale == 3, scale == 2}),
+	.scandoubler(scale || forced_scandoubler),
+	.hq2x(scale==1),
+	.mono(0),
+
+	.R({r,r}),
+	.G({g,g}),
+	.B({b,b})
+);
 
 wire [7:0] audio;
 assign AUDIO_L = {audio, 8'd0};
@@ -225,8 +245,8 @@ ladybug snapjack
 	.O_VIDEO_B(b),
 	.O_VSYNC(vs),
 	.O_HSYNC(hs),
-	.O_VBLANK(vblank),
-	.O_HBLANK(hblank),
+	.O_VBLANK(VBlank),
+	.O_HBLANK(HBlank),
 
 	.dn_addr(ioctl_addr[15:0]),
 	.dn_data(ioctl_dout),
