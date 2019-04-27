@@ -87,15 +87,20 @@ assign HDMI_ARY = status[1] ? 8'd9  : 8'd3;
 `include "build_id.v" 
 localparam CONF_STR = {
 	"A.SNPJCK;;",
+	"F,rom;", // allow loading of alternate ROMs
 	"-;",
 	"O1,Aspect Ratio,Original,Wide;",
-	"O34,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%;",
+	"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"-;",
+	"O89,Difficulty,Easy,Medium,Hard,Hardest;",
+	"ODE,Lives,3,4,5,2;",
+	"OC,Cabinet,Upright,Cocktail;",	
 	"-;",
-	"T6,Reset;",
-	"J,Start 1P,Start 2P;",
-	"V,v2.00.",`BUILD_DATE
+	"R0,Reset;",
+	"J1,Start 1P,Start 2P;",
+	"V,v",`BUILD_DATE
 };
+wire [7:0] m_dip = {~status[14:13],1'b1,1'b1,status[12],1'b0,~status[9:8]};
 
 ////////////////////   CLOCKS   ///////////////////
 
@@ -166,6 +171,20 @@ always @(posedge clk_sys) begin
 
 			'h005: btn_one_player  <= pressed; // F1
 			'h006: btn_two_players <= pressed; // F2
+			// JPAC/IPAC/MAME Style Codes
+			'h005: btn_one_player  <= pressed; // F1
+			'h006: btn_two_players <= pressed; // F2
+			'h016: btn_start_1     <= pressed; // 1
+			'h01E: btn_start_2     <= pressed; // 2
+			'h02E: btn_coin_1      <= pressed; // 5
+			'h036: btn_coin_2      <= pressed; // 6
+			'h02D: btn_up_2        <= pressed; // R
+			'h02B: btn_down_2      <= pressed; // F
+			'h023: btn_left_2      <= pressed; // D
+			'h034: btn_right_2     <= pressed; // G
+			'h01C: btn_fire_2      <= pressed; // A
+			'h01B: btn_bomb_2      <= pressed; // S
+			'h02C: btn_test        <= pressed; // T
 		endcase
 	end
 end
@@ -179,12 +198,33 @@ reg btn_bomb  = 0;
 reg btn_one_player  = 0;
 reg btn_two_players = 0;
 
+reg btn_start_1=0;
+reg btn_start_2=0;
+reg btn_coin_1=0;
+reg btn_coin_2=0;
+reg btn_up_2=0;
+reg btn_down_2=0;
+reg btn_left_2=0;
+reg btn_right_2=0;
+reg btn_fire_2=0;
+reg btn_bomb_2=0;
+reg btn_test=0;
+
+
+
 wire m_up     = btn_up    | joy[3];
 wire m_down   = btn_down  | joy[2];
 wire m_left   = btn_left  | joy[1];
 wire m_right  = btn_right | joy[0];
 wire m_fire   = btn_fire;//  | joy[4];
 wire m_bomb   = btn_bomb;//  | joy[5];
+
+wire m_up_2     = btn_up_2    | joy[3];
+wire m_down_2   = btn_down_2  | joy[2];
+wire m_left_2   = btn_left_2  | joy[1];
+wire m_right_2  = btn_right_2 | joy[0];
+wire m_fire_2  = btn_fire_2;// |joy[4];
+wire m_bomb_2  = btn_bomb_2;// |joy[5];
 
 wire m_start1 = btn_one_player  | joy[4];
 wire m_start2 = btn_two_players | joy[5];
@@ -194,39 +234,19 @@ wire ce_vid;
 wire hs, vs;
 wire [1:0] r,g,b;
 
-assign VGA_CLK  = clk_40;
-
-assign HDMI_CLK = VGA_CLK;
-assign HDMI_CE  = VGA_CE;
-assign HDMI_R   = VGA_R;
-assign HDMI_G   = VGA_G;
-assign HDMI_B   = VGA_B;
-assign HDMI_DE  = VGA_DE;
-assign HDMI_HS  = VGA_HS;
-assign HDMI_VS  = VGA_VS;
-assign HDMI_SL  = 0;
-
-wire HSync = ~hs;
-wire VSync = ~vs;
 wire HBlank, VBlank;
 
-wire [1:0] scale = status[4:3];
-
-video_mixer #(.HALF_DEPTH(1)) video_mixer
+arcade_fx #(240,6) arcade_video
 (
-	.*,
-	.clk_sys(VGA_CLK),
-	.ce_pix(ce_vid),
-	.ce_pix_out(VGA_CE),
+        .*,
+		  .ce_pix(ce_vid),
+        .clk_video(clk_sys),
 
-	.scanlines({scale == 3, scale == 2}),
-	.scandoubler(scale || forced_scandoubler),
-	.hq2x(scale==1),
-	.mono(0),
+        .RGB_in({r,g,b}),
+        .HSync(~hs),
+        .VSync(~vs),
 
-	.R({r,r}),
-	.G({g,g}),
-	.B({b,b})
+        .fx(status[5:3])
 );
 
 wire [7:0] audio;
@@ -237,7 +257,7 @@ assign AUDIO_S = 1;
 ladybug snapjack
 (
 	.CLK_IN(clk_sys),
-	.I_RESET(RESET | status[0] | status[6] | buttons[1]),
+	.I_RESET(RESET | status[0] | ioctl_download | buttons[1]),
 	.O_PIXCE(ce_vid),
 
 	.O_VIDEO_R(r),
@@ -254,15 +274,16 @@ ladybug snapjack
 
 	.O_AUDIO(audio),
 	
-	.but_coin_s(~{1'b0,m_coin}),
-	.but_fire_s(~{m_fire,m_fire}),
-	.but_bomb_s(~{m_bomb,m_bomb}),
+	.but_coin_s(~{1'b0,m_coin|btn_coin_1|btn_coin_2}),
+	.but_fire_s(~{m_fire_2,m_fire}),
+	.but_bomb_s(~{m_bomb_2,m_bomb}),
 	.but_tilt_s(~{1'b0,1'b0}),
-	.but_select_s(~{m_start2,m_start1}),
-	.but_up_s(~{m_up,m_up}),
-	.but_down_s(~{m_down,m_down}),
-	.but_left_s(~{m_left,m_left}),
-	.but_right_s(~{m_right,m_right})
+	.but_select_s(~{m_start2|btn_start_2,m_start1|btn_start_1}),
+	.but_up_s(~{m_up_2,m_up}),
+	.but_down_s(~{m_down_2,m_down}),
+	.but_left_s(~{m_left_2,m_left}),
+	.but_right_s(~{m_right_2,m_right}),
+	.dip_block_1_s(m_dip)
 );
 
 endmodule
