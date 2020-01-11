@@ -100,7 +100,7 @@ assign HDMI_ARY = status[1] ? 8'd9  : 8'd3;
 `include "build_id.v" 
 localparam CONF_STR = {
 	"A.SNPJCK;;",
-	"O1,Aspect Ratio,Original,Wide;",
+	"H0O1,Aspect Ratio,Original,Wide;",
 	"O35,Scandoubler Fx,None,HQ2x,CRT 25%,CRT 50%,CRT 75%;",
 	"-;",
 	"O89,Difficulty,Easy,Medium,Hard,Hardest;",
@@ -108,7 +108,8 @@ localparam CONF_STR = {
 	"OC,Cabinet,Upright,Cocktail;",	
 	"-;",
 	"R0,Reset;",
-	"J1,Start 1P,Start 2P;",
+	"J1,Start 1P,Start 2P,Coin;",
+        "jn,Start,Select,R;",
 	"V,v",`BUILD_DATE
 };
 wire [7:0] m_dip = {~status[14:13],1'b1,1'b1,status[12],1'b0,~status[9:8]};
@@ -131,6 +132,8 @@ pll pll
 
 wire [31:0] status;
 wire  [1:0] buttons;
+wire        forced_scandoubler;
+wire        direct_video;
 
 wire        ioctl_download;
 wire        ioctl_wr;
@@ -142,7 +145,6 @@ wire [10:0] ps2_key;
 wire [15:0] joystick_0,joystick_1;
 wire [15:0] joy = joystick_0 | joystick_1;
 
-wire        forced_scandoubler;
 
 wire [21:0] gamma_bus;
 
@@ -156,8 +158,10 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 
 	.buttons(buttons),
 	.status(status),
+	.status_menumask(direct_video),
 	.forced_scandoubler(forced_scandoubler),
 	.gamma_bus(gamma_bus),
+	.direct_video(direct_video),
 
 	.ioctl_download(ioctl_download),
 	.ioctl_wr(ioctl_wr),
@@ -243,7 +247,7 @@ wire m_bomb_2  = btn_bomb_2;// |joy[5];
 
 wire m_start1 = btn_one_player  | joy[4];
 wire m_start2 = btn_two_players | joy[5];
-wire m_coin   = m_start1 | m_start2;
+wire m_coin   = m_start1 | m_start2 | joy[6];
 
 wire ce_vid;
 wire hs, vs;
@@ -251,11 +255,20 @@ wire [1:0] r,g,b;
 
 wire HBlank, VBlank;
 
+
+reg ce_pix;
+always @(posedge clk_40) begin
+        reg [2:0] div;
+
+        div <= div + 1'd1;
+        ce_pix <= !div;
+end
+
+
 arcade_fx #(240,6) arcade_video
 (
         .*,
-		  .ce_pix(ce_vid),
-        .clk_video(clk_sys),
+        .clk_video(clk_40),
 
         .RGB_in({r,g,b}),
         .HSync(~hs),
