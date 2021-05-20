@@ -109,7 +109,8 @@ localparam CONF_STR = {
 	"-;",
 	"R0,Reset;",
 	"J1,Start 1P,Start 2P,Coin;",
-        "jn,Start,Select,R;",
+	"jn,Start,Select,R;",
+	"jp,Start,,Select;",
 	"V,v",`BUILD_DATE
 };
 wire [7:0] m_dip = {~status[14:13],1'b1,1'b1,status[12],1'b0,~status[9:8]};
